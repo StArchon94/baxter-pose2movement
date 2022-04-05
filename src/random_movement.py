@@ -8,7 +8,7 @@ import sys
 import numpy as np
 from enum import IntEnum
 from time import sleep
-from ripl_baxter_interface import Baxter
+from ripl_baxter_interface.ros_interface import Baxter
 from sensor_msgs.msg import Image
 from ripl_baxter_interface.core import MaskedInterface
 from threading import Thread
@@ -17,10 +17,10 @@ from geometry_msgs.msg import (
     Quaternion,
     PointStamped
 )
-from baxter_cube_control.cube_orientation import CubeOrientation
-from baxter_cube_control.visual_servo import CubeServo
-from baxter_cube_control.transformer import Transformer
-from cube_perception.cube_detection import detect_cube, crop_cube
+# from baxter_cube_control.cube_orientation import CubeOrientation
+# from baxter_cube_control.visual_servo import CubeServo
+# from baxter_cube_control.transformer import Transformer
+# from cube_perception.cube_detection import detect_cube, crop_cube
 from tf import transformations as T
 import cv2, time
 from cv_bridge import CvBridge
@@ -79,7 +79,7 @@ class Controller(object):
         )
         # self.servo_left   = CubeServo(self.baxter.left_arm, '/cube_detection_left/detection', '/cameras/left_hand_camera', self.CUBE_WIDTH, is_rect=True, frame='/base')
         # self.servo_right  = CubeServo(self.baxter.right_arm, '/cube_detection_right/detection', '/cameras/right_hand_camera', self.CUBE_WIDTH, is_rect=True, frame='/base')
-        self.transformer = Transformer()
+        # self.transformer = Transformer()
         # ee = self.transformer([0,0,0], '/right_gripper', '/right_hand_camera')
         # self.grasp_target  = ee - np.array([0,0,self.CUBE_WIDTH / 6])
         # self.switch_target = ee - np.array([0,0,self.CUBE_WIDTH / 2])
