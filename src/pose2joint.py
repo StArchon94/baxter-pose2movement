@@ -42,10 +42,11 @@ class Pose2Joint:
         tform_matrix = np.array([[ 6.66666667e-03, -3.48952056e-20, -8.00000000e-01],
                                 [ 1.86159941e-18, -1.41509434e-03,  2.50000000e-01],
                                 [ 2.44764673e-18,  8.00669401e-19,  1.00000000e+00]])
-        coord_2d_hm = np.concatenate((coord_2d, np.ones(1)), axis=1).T
-        robot_3d = tform_matrix @ coord_2d_hm
-        robot_3d  = robot_3d / robot_3d[-1]
-        robot_3d[0] = fixed_depth
+        coord_2d_hm = np.concatenate((coord_2d, np.ones(1))).T
+        robot_3d_hm = tform_matrix @ coord_2d_hm
+        robot_3d_hm  = robot_3d_hm / robot_3d_hm[-1]
+        robot_3d = np.concatenate((np.ones(1) * fixed_depth, robot_3d_hm[:2]))
+
         return robot_3d
 
     def depth_callback(self, data):
@@ -71,9 +72,10 @@ class Pose2Joint:
         if choice == 2:
             # get 3d coordiates from depth sensor
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
-            R_from_camera_to_world = np.eye(3)
-            t_from_caemra_to_world = np.zeros(3,1)
-            coord_3d_from_world = R_from_camera_to_world @ coord_3d_from_camera + t_from_caemra_to_world
+            # R_from_camera_to_world = np.eye(3)
+            # t_from_caemra_to_world = np.zeros((3,1))
+            # coord_3d_from_world = R_from_camera_to_world @ coord_3d_from_camera + t_from_caemra_to_world
+            coord_3d_from_world = coord_3d_from_camera
             right_wrist_3d = coord_3d_from_world[right_wrist[0], right_wrist[1]]
             robot_right_wrist_3d = self.mirroring(right_wrist_3d)
             self.pub_pose.publish(np_bridge.to_multiarray_i64(robot_right_wrist_3d))
@@ -81,10 +83,10 @@ class Pose2Joint:
         if choice == 3:
             # output 3d coords for two arms
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
-            R_from_camera_to_world = np.eye(3)
-            t_from_caemra_to_world = np.zeros(3,1)
-            coord_3d_from_world = R_from_camera_to_world @ coord_3d_from_camera + t_from_caemra_to_world
-
+            # R_from_camera_to_world = np.eye(3)
+            # t_from_caemra_to_world = np.zeros((3,1))
+            # coord_3d_from_world = R_from_camera_to_world @ coord_3d_from_camera + t_from_caemra_to_world
+            coord_3d_from_world = coord_3d_from_camera
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
 
             coords_3d_list = []
