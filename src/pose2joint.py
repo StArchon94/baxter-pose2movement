@@ -45,7 +45,7 @@ class Pose2Joint:
         coord_2d_hm = np.concatenate((coord_2d, np.ones(1)), axis=1).T
         robot_3d = tform_matrix @ coord_2d_hm
         robot_3d  = robot_3d / robot_3d[-1]
-        robot_3d[-1] = fixed_depth
+        robot_3d[0] = fixed_depth
         return robot_3d
 
     def depth_callback(self, data):
@@ -95,6 +95,6 @@ class Pose2Joint:
                 
             coords_3d = np.array(coords_3d_list)
             self.pub_pose.publish(np_bridge.to_multiarray_i64(coords_3d))
-            
+
 if __name__ == '__main__':
     Pose2Joint()
