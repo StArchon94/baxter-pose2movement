@@ -59,7 +59,7 @@ class Controller(object):
     THRESHOLD = 0.002
     CUBE_WIDTH = 0.053
 
-    def __init__(self, target_ee_pos_topic):
+    def __init__(self, target_ee_right, target_ee_left):
         self.baxter = Baxter()
         self.left_wrist = MaskedInterface(self.baxter.left_arm, [6])
         self.right_wrist = MaskedInterface(self.baxter.right_arm, [6])
@@ -71,7 +71,8 @@ class Controller(object):
         self._is_shutdown = True
 
         # self.pose = rospy.Subscriber(target_ee_pos_topic, TargetEE, self.pose_callback)
-        rospy.Subscriber(target_ee_pos_topic, Float64MultiArray, self.pose_callback)
+        rospy.Subscriber(target_ee_right, PointStamped, self.pose_right_callback)
+        rospy.Subscriber(target_ee_left, PointStamped, self.pose_left_callback)
 
     def initialize(self):
         self.cube_arm = 'left'
@@ -213,7 +214,7 @@ class Controller(object):
     """
     Callback
     """
-    def pose_callback(self, poses):
+    def pose_right_callback(self, poses):
         rpos_ee = Point(*np_bridge.to_numpy_f64(poses))
         rospy.loginfo(f'Received rpos_ee: {rpos_ee}')
         # lpos_ee = poses.left_ee
@@ -233,40 +234,30 @@ class Controller(object):
 
         rospy.loginfo('pose callback is called!!')
 
+    def pose_left_callback(self, poses):
+        pos_ee = Point(*np_bridge.to_numpy_f64(poses))
+        rospy.loginfo(f'Received rpos_ee: {pos_ee}')
 
-    def capture_image(self, rot=None):
-        assert rot in [None,'c','cc','2']
-        # Hack to ensure that the cube is detectable in images.
-        cube_detected = False
-        while not cube_detected:
-            img_msg = rospy.wait_for_message('/camera/color/image_rect_color', Image, timeout=10.)
-            bridge = CvBridge()
-            img = bridge.imgmsg_to_cv2(img_msg, "bgr8")
-            cube = detect_cube(img)
-            if cube is not None:
-                img = crop_cube(img, cube)
-                cube_detected = True
+        jpos = self.baxter.left_arm.solve_ik(pos_ee, self.init_quat_l)
+        if jpos is None:
+            rospy.logwarn('[warn] IK solution not found!')
+            rospy.loginfo('[info] IK solution not found!')
 
-        h,w = img.shape[:2]
-        center = (w / 2, h / 2)
-        if rot == 'c':
-            M = cv2.getRotationMatrix2D(center, 270, 1.0)
-            img = cv2.warpAffine(img, M, (h, w))
-        if rot == 'cc':
-            M = cv2.getRotationMatrix2D(center, 90, 1.0)
-            img = cv2.warpAffine(img, M, (h, w))
-        if rot == '2':
-            M = cv2.getRotationMatrix2D(center, 180, 1.0)
-            img = cv2.warpAffine(img, M, (h, w))
-        new_img_msg = bridge.cv2_to_imgmsg(img, "bgr8")
-        new_img_msg.header = img_msg.header
-        return new_img_msg
+        # MOVE
+        self.baxter.left_arm.move_to_joint_positions(jpos)
+        # self.baxter.left_arm.move_to_joint_positions(jpos_l)
+
+        rospy.loginfo('pose callback is called!!')
+
 
 def main():
     # TODO: Let's see if this works.
     rospy.init_node('baxter_cube_control')
     rospy.loginfo('Instantiating controller')
-    c = Controller(target_ee_pos_topic='/robot_poses')
+    c = Controller(
+        target_ee_right='/robot_poses/right',
+        target_ee_left='/robot_poses/left',
+    )
     rospy.loginfo('Initializing controller')
     c.initialize()
     # c.move_to_neutral()

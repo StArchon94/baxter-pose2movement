@@ -4,7 +4,8 @@ import rospy
 from cv_bridge import CvBridge
 from np_bridge import np_bridge
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float64MultiArray, Int64MultiArray
+from std_msgs.msg import Header, Float64MultiArray, Int64MultiArray
+from geometry_msgs.msg import PointStamped, Pose, Point
 
 from camera import Camera
 
@@ -74,7 +75,9 @@ class Pose2Joint:
         rospy.init_node('pose2joint')
         rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', Image, callback=self.depth_callback, queue_size=1, buff_size=SIZE20M)
         rospy.Subscriber('/tracked_poses', Int64MultiArray, callback=self.pose_callback, queue_size=1)
-        self.pub_pose = rospy.Publisher('/robot_poses', Float64MultiArray, queue_size=1)
+        # self.pub_pose = rospy.Publisher('/robot_poses', Float64MultiArray, queue_size=1)
+        self.pub_pose_left = rospy.Publisher('/robot_poses/right', PointStamped, queue_size=1)
+        self.pub_pose_right = rospy.Publisher('/robot_poses/left', PointStamped, queue_size=1)
         rospy.loginfo('Pose2Joint Node is Up!')
         rospy.spin()
 
@@ -113,7 +116,7 @@ class Pose2Joint:
         # right_shoulder = green_object_pose[6,:]
         # left_elbow = green_object_pose[7,:]
         # right_elbow = green_object_pose[8,:]
-        # left_wrist = green_object_pose[9,:]
+        left_wrist = green_object_pose[9,:]
         right_wrist = green_object_pose[10,:]
 
         choice = self.choice
@@ -123,6 +126,7 @@ class Pose2Joint:
             robot_right_wrist_3d = self.direct_mapping(right_wrist)
             print('robot_right_wrist_3d')
             print(robot_right_wrist_3d)
+
             self.pub_pose.publish(np_bridge.to_multiarray_i64(robot_right_wrist_3d))
 
         if choice == 2:
@@ -132,6 +136,7 @@ class Pose2Joint:
                 self.depth = np.zeros((self.camera.H, self.camera.W))
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
             right_wrist_3d_from_camera = coord_3d_from_camera[right_wrist[1], right_wrist[0]]
+            left_wrist_3d_from_camera = coord_3d_from_camera[left_wrist[1], left_wrist[0]]
 
             print('camera frame right_wrist_3d')
             print(right_wrist_3d_from_camera)
@@ -146,16 +151,27 @@ class Pose2Joint:
             print(coord_3d_from_world.shape)
 
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
+            left_wrist_3d = coord_3d_from_world[left_wrist[1], left_wrist[0]]
             
             print('world frame right_wrist_3d')
             print(right_wrist_3d)
 
             robot_right_wrist_3d = self.mirroring(right_wrist_3d)
+            robot_left_wrist_3d = self.mirroring(left_wrist_3d)
 
             print('robot_right_wrist_3d')
             print(robot_right_wrist_3d)
 
-            self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
+            # Right
+            header = Header(stamp=rospy.Time.now(), frame_id='base')
+            pose_stamped = PointStamped(header=header, point=Point(*robot_right_wrist_3d))
+            self.pub_pose_right.publish(pose_stamped)
+
+            # Left
+            header = Header(stamp=rospy.Time.now(), frame_id='base')
+            pose_stamped = PointStamped(header=header, point=Point(*robot_left_wrist_3d))
+            self.pub_pose_left.publish(pose_stamped)
+            # self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
         if self.choice == 3:
             # output 3d coords for two arms
