@@ -22,6 +22,7 @@ class Pose2Joint:
         W = 424
         K = [308.5246276855469, 0.0, 207.89334106445312, 0.0, 308.5497741699219, 118.29705810546875, 0.0, 0.0, 1.0]
         self.camera = Camera(H=240, W=424, K=K)
+        self.choice = 1 # pose callback choice
         rospy.init_node('pose2joint')
         rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', Image, callback=self.depth_callback, queue_size=1, buff_size=SIZE20M)
         rospy.Subscriber('/tracked_poses', Int64MultiArray, callback=self.pose_callback, queue_size=1)
@@ -52,7 +53,7 @@ class Pose2Joint:
     def depth_callback(self, data):
         self.depth = self.cv_bridge.imgmsg_to_cv2(data, desired_encoding='passthrough')
 
-    def pose_callback(self, data, choice=1):
+    def pose_callback(self, data):
         poses = np_bridge.to_numpy_i64(data)
         green_object_idx = np.where(poses[:,-1,0] == 1)
         green_object_pose = poses[green_object_idx].squeeze()
@@ -62,31 +63,44 @@ class Pose2Joint:
         # right_elbow = green_object_pose[8,:]
         # left_wrist = green_object_pose[9,:]
         right_wrist = green_object_pose[10,:]
+
+        choice = self.choice
         
         if choice == 1:
             # get 3d coordinates from 2d points and direct scaling
             robot_right_wrist_3d = self.direct_mapping(right_wrist)
+            print('robot_right_wrist_3d')
+            print(robot_right_wrist_3d)
             self.pub_pose.publish(np_bridge.to_multiarray_i64(robot_right_wrist_3d))
-
 
         if choice == 2:
             # get 3d coordiates from depth sensor
+            if self.depth is None:
+                print('no depth')
+                self.depth = np.zeros((self.camera.H, self.camera.W))
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
-            # R_from_camera_to_world = np.eye(3)
-            # t_from_caemra_to_world = np.zeros((3,1))
-            # coord_3d_from_world = R_from_camera_to_world @ coord_3d_from_camera + t_from_caemra_to_world
-            coord_3d_from_world = coord_3d_from_camera
+            R_from_camera_to_world = np.eye(3)
+            t_from_caemra_to_world = np.zeros((3,1))
+            coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
+                 coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
+
             right_wrist_3d = coord_3d_from_world[right_wrist[0], right_wrist[1]]
             robot_right_wrist_3d = self.mirroring(right_wrist_3d)
+            # print('robot_right_wrist_3d')
+            # print(robot_right_wrist_3d)
             self.pub_pose.publish(np_bridge.to_multiarray_i64(robot_right_wrist_3d))
 
         if choice == 3:
             # output 3d coords for two arms
+            if self.depth is None:
+                print('no depth')
+                self.depth = np.zeros((self.camera.H, self.camera.W))
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
-            # R_from_camera_to_world = np.eye(3)
-            # t_from_caemra_to_world = np.zeros((3,1))
-            # coord_3d_from_world = R_from_camera_to_world @ coord_3d_from_camera + t_from_caemra_to_world
-            coord_3d_from_world = coord_3d_from_camera
+            R_from_camera_to_world = np.eye(3)
+            t_from_caemra_to_world = np.zeros((3,1))
+            coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
+                 coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
+
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
 
             coords_3d_list = []
@@ -94,8 +108,9 @@ class Pose2Joint:
                 coord_2d = green_object_pose[i,:]
                 coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
                 coords_3d_list.append(coord_3d)
-                
             coords_3d = np.array(coords_3d_list)
+            # print('coords_3d')
+            # print(coords_3d)
             self.pub_pose.publish(np_bridge.to_multiarray_i64(coords_3d))
 
 if __name__ == '__main__':
