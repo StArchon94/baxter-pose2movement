@@ -1,5 +1,4 @@
 #!/usr/bin/env python3.8
-
 import numpy as np
 import rospy
 from cv_bridge import CvBridge
@@ -10,6 +9,54 @@ from std_msgs.msg import Float64MultiArray, Int64MultiArray
 from camera import Camera
 
 SIZE20M = 20 * 1024 * 1024
+
+class RorationMatrix:
+    # Rotation matrix around x-axis
+    def __init__(self, degree) -> None:
+        self.degree = degree
+
+    @property
+    def radius(self):
+        return self.degree / 180.0 * np.pi
+
+    @property
+    def matrix(self):
+        raise NotImplementedError
+
+
+class Rx(RorationMatrix):
+    @property
+    def matrix(self):
+        R = np.eye(3)
+        R[1,1] = np.cos(self.radius)
+        R[1,2] = -np.sin(self.radius)
+        R[2,1] = np.sin(self.radius)
+        R[2,2] = np.cos(self.radius)
+
+        return R
+
+class Ry(RorationMatrix):
+    @property
+    def matrix(self):
+        R = np.eye(3)
+        R[0,0] = np.cos(self.radius)
+        R[0,2] = np.sin(self.radius)
+        R[2,0] = -np.sin(self.radius)
+        R[2,2] = np.cos(self.radius)
+
+        return R
+
+class Rz(RorationMatrix):
+    @property
+    def matrix(self):
+        R = np.eye(3)
+        R[0,0] = np.cos(self.radius)
+        R[0,1] = -np.sin(self.radius)
+        R[1,0] = np.sin(self.radius)
+        R[1,1] = np.cos(self.radius)
+
+        return R
+
 
 
 class Pose2Joint:
@@ -22,7 +69,7 @@ class Pose2Joint:
         K = [308.5246276855469, 0.0, 207.89334106445312, 0.0, 308.5497741699219, 118.29705810546875, 0.0, 0.0, 1.0]
         self.camera = Camera(H, W, K)
 
-        self.choice = 3
+        self.choice = 2
 
         rospy.init_node('pose2joint')
         rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', Image, callback=self.depth_callback, queue_size=1, buff_size=SIZE20M)
@@ -33,8 +80,9 @@ class Pose2Joint:
 
     @staticmethod
     def mirroring(human_3d):
-        mirror_plane = 0
+        mirror_plane = 1.0
         robot_3d = human_3d
+        robot_3d[0] = 2 * mirror_plane - robot_3d[0]
 
         return robot_3d
 
@@ -58,7 +106,8 @@ class Pose2Joint:
         if self.depth is None:
             return
         poses = np_bridge.to_numpy_i64(data)
-        green_object_idx = np.where(poses[:, -1, 0] == 1)
+        # green_object_idx = np.where(poses[:, -1, 0] == 1)
+        green_object_idx = np.argwhere(poses[:, -1, 0] == 1)[0][0]
         green_object_pose = poses[green_object_idx].squeeze()
         # left_shoulder = green_object_pose[5,:]
         # right_shoulder = green_object_pose[6,:]
@@ -82,13 +131,30 @@ class Pose2Joint:
                 print('no depth')
                 self.depth = np.zeros((self.camera.H, self.camera.W))
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
-            R_from_camera_to_world = np.eye(3)
-            t_from_caemra_to_world = np.zeros((3,1))
+            right_wrist_3d_from_camera = coord_3d_from_camera[right_wrist[1], right_wrist[0]]
+
+            print('camera frame right_wrist_3d')
+            print(right_wrist_3d_from_camera)
+
+            # R_from_camera_to_world = np.eye(3)
+            # t_from_caemra_to_world = np.zeros((3,1))
+            R_from_camera_to_world = Ry(22 + 90).matrix
+            t_from_caemra_to_world = np.array([0.0947, 0, .817])[:,np.newaxis]
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
                  coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
-            right_wrist_3d = coord_3d_from_world[right_wrist[0], right_wrist[1]]
+            print(coord_3d_from_world.shape)
+
+            right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
+            
+            print('world frame right_wrist_3d')
+            print(right_wrist_3d)
+
             robot_right_wrist_3d = self.mirroring(right_wrist_3d)
+
+            print('robot_right_wrist_3d')
+            print(robot_right_wrist_3d)
+
             self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
         if self.choice == 3:
