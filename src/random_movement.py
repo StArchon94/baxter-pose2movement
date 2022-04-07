@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3.8
 
 # For the usage of Baxter class, take a look at
 # https://github.com/ripl/baxter-rubiks-cube/blob/master/src/baxter-cube-control/src/baxter_cube_control/control.py
@@ -17,7 +17,9 @@ from geometry_msgs.msg import (
     Quaternion,
     PointStamped
 )
-from test_ee.msg import TargetEE
+# from test_ee.msg import TargetEE
+from std_msgs.msg import Float64MultiArray, Int64MultiArray
+from np_bridge import np_bridge
 
 # from baxter_cube_control.cube_orientation import CubeOrientation
 # from baxter_cube_control.visual_servo import CubeServo
@@ -69,7 +71,7 @@ class Controller(object):
         self._is_shutdown = True
 
         # self.pose = rospy.Subscriber(target_ee_pos_topic, TargetEE, self.pose_callback)
-        rospy.Subscriber(target_ee_pos_topic, TargetEE, self.pose_callback)
+        rospy.Subscriber(target_ee_pos_topic, Float64MultiArray, self.pose_callback)
 
     def initialize(self):
         self.cube_arm = 'left'
@@ -77,6 +79,9 @@ class Controller(object):
         self.enable()
         rospy.loginfo('Moving to neutral pose')
         self.move_to_neutral()
+
+        self.init_quat_r = self.baxter.right_arm.get_ee_pose()['orientation']
+        self.init_quat_l = self.baxter.left_arm.get_ee_pose()['orientation']
 
         # This executes EndEffectorCommand.CMD_CALIBRATE command
         _threaded_execution(
@@ -209,17 +214,22 @@ class Controller(object):
     Callback
     """
     def pose_callback(self, poses):
-        lpos_ee = poses.left_ee
-        rpos_ee = poses.right_ee
+        rpos_ee = Point(*np_bridge.to_numpy_f64(poses))
+        rospy.loginfo(f'Received rpos_ee: {rpos_ee}')
+        # lpos_ee = poses.left_ee
+        # rpos_ee = poses.right_ee
 
-        jquat_r = self.baxter.right_arm.get_ee_pose()['orientation']
-        jquat_l = self.baxter.left_arm.get_ee_pose()['orientation']
-        jpos_r = self.baxter.right_arm.solve_ik(lpos_ee, jquat_r)
-        jpos_l = self.baxter.left_arm.solve_ik(rpos_ee, jquat_l)
+        # jquat_r = self.baxter.right_arm.get_ee_pose()['orientation']
+        # jquat_l = self.baxter.left_arm.get_ee_pose()['orientation']
+        jpos_r = self.baxter.left_arm.solve_ik(rpos_ee, self.init_quat_r)
+        if jpos_r is None:
+            rospy.logwarn('[warn] IK solution not found!')
+            rospy.loginfo('[info] IK solution not found!')
+        # jpos_l = self.baxter.right_arm.solve_ik(lpos_ee, self.init_quat_l)
 
         # MOVE
         self.baxter.right_arm.move_to_joint_positions(jpos_r)
-        self.baxter.left_arm.move_to_joint_positions(jpos_l)
+        # self.baxter.left_arm.move_to_joint_positions(jpos_l)
 
         rospy.loginfo('pose callback is called!!')
 
@@ -256,7 +266,7 @@ def main():
     # TODO: Let's see if this works.
     rospy.init_node('baxter_cube_control')
     rospy.loginfo('Instantiating controller')
-    c = Controller(target_ee_pos_topic='/target_ee')
+    c = Controller(target_ee_pos_topic='/robot_poses')
     rospy.loginfo('Initializing controller')
     c.initialize()
     # c.move_to_neutral()
