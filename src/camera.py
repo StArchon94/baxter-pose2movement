@@ -17,6 +17,7 @@ class Camera:
         self.K_inv = np.linalg.inv(K)
 
     def reconstruct(self, depth):
+        depth = depth / 1000.0
         depth = np.expand_dims(depth, axis=-1)
         grid = self.grid * depth
         grid = np.expand_dims(grid, axis=-1)
