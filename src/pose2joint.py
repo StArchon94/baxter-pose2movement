@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.8
+from urllib.request import AbstractDigestAuthHandler
 import numpy as np
 import rospy
 from cv_bridge import CvBridge
@@ -61,7 +62,7 @@ class Rz(RorationMatrix):
 
 class Pose2Joint:
     def __init__(self) -> None:
-        self.depth = None
+        self.depth_raw = None
         self.cv_bridge = CvBridge()
         # hard-coded camera
         H = 240
@@ -70,6 +71,10 @@ class Pose2Joint:
         self.camera = Camera(H, W, K)
 
         self.choice = 2
+
+        # self.valid_flag = False
+        self.valid_arm_poses = None
+        self.valid_depths = None
 
         rospy.init_node('pose2joint')
         rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', Image, callback=self.depth_callback, queue_size=1, buff_size=SIZE20M)
@@ -99,39 +104,87 @@ class Pose2Joint:
 
         return robot_3d
 
+    @staticmethod
+    def check_valid_depth(depth, range=[0.0, 2.0]):
+        depth = depth / 1000
+        return (depth > range[0] and depth < range[1])
+
     def depth_callback(self, data):
-        self.depth = self.cv_bridge.imgmsg_to_cv2(data, desired_encoding='passthrough')
+        self.depth_raw = self.cv_bridge.imgmsg_to_cv2(data, desired_encoding='passthrough')
 
     def pose_callback(self, data):
-        if self.depth is None:
+        if self.depth_raw is None:
+            print('no depth')
             return
         poses = np_bridge.to_numpy_i64(data)
         # green_object_idx = np.where(poses[:, -1, 0] == 1)
         green_object_idx = np.argwhere(poses[:, -1, 0] == 1)[0][0]
         green_object_pose = poses[green_object_idx].squeeze()
-        # left_shoulder = green_object_pose[5,:]
-        # right_shoulder = green_object_pose[6,:]
-        # left_elbow = green_object_pose[7,:]
-        # right_elbow = green_object_pose[8,:]
-        # left_wrist = green_object_pose[9,:]
-        right_wrist = green_object_pose[10,:]
+        arm_poses = green_object_pose[5:11, :]
+
+        # make sure we start publishing with a valid arm pose
+        if self.valid_arm_poses is None:
+            if np.all(arm_poses > 0):
+                self.valid_arm_poses = arm_poses
+            else:
+                print('no valid poses yet')
+                return
+
+        # update last_valid_arm_poses
+        for i in range(6):
+            if np.all(arm_poses[i,:] > 0):
+                self.valid_arm_poses[i,:] = arm_poses[i,:]
+
+        # make sure there are depth valid for all joints
+        if self.valid_depths is None:
+            valid_depths = -np.ones(6)
+            for i in range(6):
+                joint_coord_2d = self.valid_arm_poses[i,:]
+                joint_depth = self.depth_raw[joint_coord_2d[1], joint_coord_2d[0]]
+                if self.check_valid_depth(joint_depth):
+                    valid_depths[i] = joint_depth
+            if np.all(valid_depths > 0):
+                self.valid_depths = valid_depths
+            else:
+                print(valid_depths)
+                print('not all depths are valid yet')
+                return
+
+        # update valid depths
+        filtered_depth = self.depth_raw.copy()
+        for i in range(6):
+            joint_coord_2d = self.valid_arm_poses[i,:]
+            joint_depth = filtered_depth[joint_coord_2d[1], joint_coord_2d[0]]
+            # joint_depth = joint_depth.copy()
+            if not self.check_valid_depth(joint_depth):
+                joint_depth = self.valid_depths[i]
+            else:
+                self.valid_depths[i] = joint_depth
+            filtered_depth[joint_coord_2d[1], joint_coord_2d[0]] = joint_depth
+
+        left_shoulder = self.valid_arm_poses[0,:]
+        right_shoulder = self.valid_arm_poses[1,:]
+        left_elbow = self.valid_arm_poses[2,:]
+        right_elbow = self.valid_arm_poses[3,:]
+        left_wrist = self.valid_arm_poses[4, :]
+        right_wrist = self.valid_arm_poses[5, :]
 
         choice = self.choice
         
         if choice == 1:
             # get 3d coordinates from 2d points and direct scaling
             robot_right_wrist_3d = self.direct_mapping(right_wrist)
-            print('robot_right_wrist_3d')
-            print(robot_right_wrist_3d)
-            self.pub_pose.publish(np_bridge.to_multiarray_i64(robot_right_wrist_3d))
+            # print('robot_right_wrist_3d')
+            # print(robot_right_wrist_3d)
+            self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
         if choice == 2:
             # get 3d coordiates from depth sensor
-            if self.depth is None:
-                print('no depth')
-                self.depth = np.zeros((self.camera.H, self.camera.W))
-            coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
+            coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
             right_wrist_3d_from_camera = coord_3d_from_camera[right_wrist[1], right_wrist[0]]
+
+            print('right wrist 2d')
+            print(right_wrist)
 
             print('camera frame right_wrist_3d')
             print(right_wrist_3d_from_camera)
@@ -143,7 +196,7 @@ class Pose2Joint:
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
                  coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
-            print(coord_3d_from_world.shape)
+            # print(coord_3d_from_world.shape)
 
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
             
@@ -152,17 +205,14 @@ class Pose2Joint:
 
             robot_right_wrist_3d = self.mirroring(right_wrist_3d)
 
-            print('robot_right_wrist_3d')
+            print('robot right wrist 3d')
             print(robot_right_wrist_3d)
 
             self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
         if self.choice == 3:
             # output 3d coords for two arms
-            if self.depth is None:
-                print('no depth')
-                self.depth = np.zeros((self.camera.H, self.camera.W))
-            coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
+            coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
             R_from_camera_to_world = np.eye(3)
             t_from_caemra_to_world = np.zeros((3,1))
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
