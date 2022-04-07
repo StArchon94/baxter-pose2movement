@@ -58,7 +58,10 @@ class Pose2Joint:
         if self.depth is None:
             return
         poses = np_bridge.to_numpy_i64(data)
-        green_object_idx = np.where(poses[:, -1, 0] == 1)
+        green_object_idx = np.argwhere(poses[:, -1, 0] == 1)
+        if not len(green_object_idx):
+            return
+        green_object_idx = green_object_idx[0][0]
         green_object_pose = poses[green_object_idx].squeeze()
         # left_shoulder = green_object_pose[5,:]
         # right_shoulder = green_object_pose[6,:]
@@ -91,18 +94,14 @@ class Pose2Joint:
             robot_right_wrist_3d = self.mirroring(right_wrist_3d)
             self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
-        if self.choice == 3:
+        if choice == 3:
             # output 3d coords for two arms
-            if self.depth is None:
-                print('no depth')
-                self.depth = np.zeros((self.camera.H, self.camera.W))
             coord_3d_from_camera = self.camera.reconstruct(depth=self.depth)
             R_from_camera_to_world = np.eye(3)
             t_from_caemra_to_world = np.zeros((3,1))
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
                  coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
-            right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
 
             coords_3d_list = []
             for i in range(5, 11):
@@ -110,7 +109,7 @@ class Pose2Joint:
                 coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
                 coords_3d_list.append(coord_3d)
 
-            coords_3d = np.array(coords_3d_list)
+            coords_3d = np.array(coords_3d_list).squeeze()
             self.pub_pose.publish(np_bridge.to_multiarray_f64(coords_3d))
 
 
