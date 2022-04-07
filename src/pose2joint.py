@@ -11,6 +11,7 @@ from camera import Camera
 
 SIZE20M = 20 * 1024 * 1024
 
+
 class RorationMatrix:
     # Rotation matrix around x-axis
     def __init__(self, degree) -> None:
@@ -29,35 +30,36 @@ class Rx(RorationMatrix):
     @property
     def matrix(self):
         R = np.eye(3)
-        R[1,1] = np.cos(self.radius)
-        R[1,2] = -np.sin(self.radius)
-        R[2,1] = np.sin(self.radius)
-        R[2,2] = np.cos(self.radius)
+        R[1, 1] = np.cos(self.radius)
+        R[1, 2] = -np.sin(self.radius)
+        R[2, 1] = np.sin(self.radius)
+        R[2, 2] = np.cos(self.radius)
 
         return R
+
 
 class Ry(RorationMatrix):
     @property
     def matrix(self):
         R = np.eye(3)
-        R[0,0] = np.cos(self.radius)
-        R[0,2] = np.sin(self.radius)
-        R[2,0] = -np.sin(self.radius)
-        R[2,2] = np.cos(self.radius)
+        R[0, 0] = np.cos(self.radius)
+        R[0, 2] = np.sin(self.radius)
+        R[2, 0] = -np.sin(self.radius)
+        R[2, 2] = np.cos(self.radius)
 
         return R
+
 
 class Rz(RorationMatrix):
     @property
     def matrix(self):
         R = np.eye(3)
-        R[0,0] = np.cos(self.radius)
-        R[0,1] = -np.sin(self.radius)
-        R[1,0] = np.sin(self.radius)
-        R[1,1] = np.cos(self.radius)
+        R[0, 0] = np.cos(self.radius)
+        R[0, 1] = -np.sin(self.radius)
+        R[1, 0] = np.sin(self.radius)
+        R[1, 1] = np.cos(self.radius)
 
         return R
-
 
 
 class Pose2Joint:
@@ -117,8 +119,10 @@ class Pose2Joint:
             print('no depth')
             return
         poses = np_bridge.to_numpy_i64(data)
-        # green_object_idx = np.where(poses[:, -1, 0] == 1)
-        green_object_idx = np.argwhere(poses[:, -1, 0] == 1)[0][0]
+        green_object_idx = np.argwhere(poses[:, -1, 0] == 1)
+        if not len(green_object_idx):
+            return
+        green_object_idx = green_object_idx[0][0]
         green_object_pose = poses[green_object_idx].squeeze()
         arm_poses = green_object_pose[5:11, :]
 
@@ -170,7 +174,7 @@ class Pose2Joint:
         right_wrist = self.valid_arm_poses[5, :]
 
         choice = self.choice
-        
+
         if choice == 1:
             # get 3d coordinates from 2d points and direct scaling
             robot_right_wrist_3d = self.direct_mapping(right_wrist)
@@ -192,14 +196,14 @@ class Pose2Joint:
             # R_from_camera_to_world = np.eye(3)
             # t_from_caemra_to_world = np.zeros((3,1))
             R_from_camera_to_world = Ry(22 + 90).matrix
-            t_from_caemra_to_world = np.array([0.0947, 0, .817])[:,np.newaxis]
+            t_from_caemra_to_world = np.array([0.0947, 0, .817])[:, np.newaxis]
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
-                 coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
+                coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
             # print(coord_3d_from_world.shape)
 
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
-            
+
             print('world frame right_wrist_3d')
             print(right_wrist_3d)
 
@@ -210,15 +214,13 @@ class Pose2Joint:
 
             self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
-        if self.choice == 3:
+        if choice == 3:
             # output 3d coords for two arms
             coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
             R_from_camera_to_world = np.eye(3)
-            t_from_caemra_to_world = np.zeros((3,1))
+            t_from_caemra_to_world = np.zeros((3, 1))
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
-                 coord_3d_from_camera[:,:,:,np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
-
-            right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
+                coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
             coords_3d_list = []
             for i in range(5, 11):
@@ -226,7 +228,7 @@ class Pose2Joint:
                 coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
                 coords_3d_list.append(coord_3d)
 
-            coords_3d = np.array(coords_3d_list)
+            coords_3d = np.array(coords_3d_list).squeeze()
             self.pub_pose.publish(np_bridge.to_multiarray_f64(coords_3d))
 
 
