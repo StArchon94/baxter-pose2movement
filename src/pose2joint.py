@@ -215,8 +215,6 @@ class Pose2Joint:
             print('robot right wrist 3d')
             print(robot_right_wrist_3d)
 
-<<<<<<< HEAD
-=======
             # Right
             header = Header(stamp=rospy.Time.now(), frame_id='base')
             pose_stamped = PointStamped(header=header, point=Point(*robot_right_wrist_3d))
@@ -236,7 +234,6 @@ class Pose2Joint:
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
                 coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
->>>>>>> 886c18fc0abeffecb2c087bfc87a19c03a427aff
             coords_3d_list = []
             for i in range(6):
                 coord_2d = self.valid_arm_poses[i, :]
