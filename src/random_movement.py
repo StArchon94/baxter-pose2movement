@@ -50,7 +50,7 @@ class PositionScaling:
         x, y, z = pos
         return np.array([
             self.scale(0.18, 0.08, 0.72, 0.57, x),
-            self.scale(0.15, -0.17, -0.0, -0.68, y),
+            self.scale(0.05, -0.25, -0.0, -0.68, y),
             self.scale(0.4, -0.2, 0.24, -0.08, z)
         ])
 
@@ -256,7 +256,7 @@ class Controller(object):
         # jquat_l = self.baxter.left_arm.get_ee_pose()['orientation']
         scaled = self.pos_scale.right([pos_ee.x, pos_ee.y, pos_ee.z])
         # rospy.loginfo(f'scaled right: {scaled}')
-        jpos_r = self.baxter.right_arm.solve_ik(scaled, orientation=self.init_quat_r if self.fix_ori else None, tol=0.001)
+        jpos_r = self.baxter.right_arm.solve_ik(scaled, orientation=self.init_quat_r if self.fix_ori else None, tol=0.01)
         if jpos_r is None:
             rospy.logwarn('[warn] IK solution not found!')
             rospy.loginfo('[info] IK solution not found!')
@@ -283,7 +283,7 @@ class Controller(object):
 
         scaled = self.pos_scale.left([pos_ee.x, pos_ee.y, pos_ee.z])
         rospy.loginfo(f'scaled left: {scaled}')
-        jpos = self.baxter.left_arm.solve_ik(scaled, orientation=self.init_quat_l if self.fix_ori else None, tol=0.001)  # :solve_ik(pos_ee, self.init_quat_l)
+        jpos = self.baxter.left_arm.solve_ik(scaled, orientation=self.init_quat_l if self.fix_ori else None, tol=0.01)  # :solve_ik(pos_ee, self.init_quat_l)
         if jpos is None:
             rospy.logwarn('[warn] IK solution not found!')
             rospy.loginfo('[info] IK solution not found!')
