@@ -195,12 +195,10 @@ class Pose2Joint:
 
             # R_from_camera_to_world = np.eye(3)
             # t_from_caemra_to_world = np.zeros((3,1))
-            R_from_camera_to_world = Ry(22 + 90).matrix
+            R_from_camera_to_world = Ry(22 + 90).matrix @ Rz(-90).matrix
             t_from_caemra_to_world = np.array([0.0947, 0, .817])[:, np.newaxis]
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
                 coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
-
-            # print(coord_3d_from_world.shape)
 
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
 
@@ -212,24 +210,32 @@ class Pose2Joint:
             print('robot right wrist 3d')
             print(robot_right_wrist_3d)
 
-            self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
-
-        if choice == 3:
-            # output 3d coords for two arms
-            coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
-            R_from_camera_to_world = np.eye(3)
-            t_from_caemra_to_world = np.zeros((3, 1))
-            coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
-                coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
-
             coords_3d_list = []
-            for i in range(5, 11):
-                coord_2d = green_object_pose[i, :]
+            for i in range(6):
+                coord_2d = self.valid_arm_poses[i, :]
                 coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
                 coords_3d_list.append(coord_3d)
-
             coords_3d = np.array(coords_3d_list).squeeze()
+
+            # self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
             self.pub_pose.publish(np_bridge.to_multiarray_f64(coords_3d))
+
+        # if choice == 3:
+        #     # output 3d coords for two arms
+        #     coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
+        #     R_from_camera_to_world = np.eye(3)
+        #     t_from_caemra_to_world = np.zeros((3, 1))
+        #     coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
+        #         coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
+
+        #     coords_3d_list = []
+        #     for i in range(5, 11):
+        #         coord_2d = green_object_pose[i, :]
+        #         coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
+        #         coords_3d_list.append(coord_3d)
+
+        #     coords_3d = np.array(coords_3d_list).squeeze()
+        #     self.pub_pose.publish(np_bridge.to_multiarray_f64(coords_3d))
 
 
 if __name__ == '__main__':
