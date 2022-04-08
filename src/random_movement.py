@@ -38,6 +38,30 @@ def _threaded_execution(*fs):
     for t in ts:
         t.join()
 
+class PositionScaling:
+    def scale(self, src_max, src_min, tar_max, tar_min, val):
+        normed_val = min(max((val - src_min) / (src_max - src_min), 0), 1)
+        return normed_val * (tar_max - tar_min) + tar_min
+        # ratio =  (tar_max - tar_min) / (src_max - src_min)
+        # bias = (tar_max + tar_min) / 2 - (src_max + src_min) / 2
+        # return ratio * (val - src_min) + bias
+
+    def right(self, pos):
+        x, y, z = pos
+        return np.array([
+            self.scale(0.18, 0.08, 0.72, 0.57, x),
+            self.scale(0.15, -0.17, -0.0, -0.68, y),
+            self.scale(0.4, -0.2, 0.24, -0.08, z)
+        ])
+
+    def left(self, pos):
+        x, y, z = pos
+        return np.array([
+            self.scale(0.18, 0.08, 0.72, 0.57, x),
+            self.scale(0.5, 0.2, 0.68, 0.0, y),
+            self.scale(0.38, -0.26, 0.24, -0.08, z)
+        ])
+
 
 class Controller(object):
     PREGRASP_LEFT_L = [0.2699475789229093, 0.2842230803643011, -1.4579529514621827, 1.618811812419806, 0.23180537362816822, 0.9775378517825944, -1.4657076440241334]
@@ -59,7 +83,7 @@ class Controller(object):
     THRESHOLD = 0.002
     CUBE_WIDTH = 0.053
 
-    def __init__(self, target_ee_right, target_ee_left):
+    def __init__(self, target_ee_right, target_ee_left, fix_ori=False):
         self.baxter = Baxter()
         self.left_wrist = MaskedInterface(self.baxter.left_arm, [6])
         self.right_wrist = MaskedInterface(self.baxter.right_arm, [6])
@@ -69,10 +93,12 @@ class Controller(object):
         self._pause_semaphore = BoundedSemaphore(1)
         self.paused = False
         self._is_shutdown = True
+        self.pos_scale = PositionScaling()
+        self.fix_ori = fix_ori
 
         # self.pose = rospy.Subscriber(target_ee_pos_topic, TargetEE, self.pose_callback)
-        rospy.Subscriber(target_ee_right, PointStamped, self.pose_right_callback)
-        rospy.Subscriber(target_ee_left, PointStamped, self.pose_left_callback)
+        rospy.Subscriber(target_ee_right, PointStamped, self.pose_right_callback, queue_size=1)
+        rospy.Subscriber(target_ee_left, PointStamped, self.pose_left_callback, queue_size=1)
 
     def initialize(self):
         self.cube_arm = 'left'
@@ -80,9 +106,12 @@ class Controller(object):
         self.enable()
         rospy.loginfo('Moving to neutral pose')
         self.move_to_neutral()
-
-        self.init_quat_r = self.baxter.right_arm.get_ee_pose()['orientation']
-        self.init_quat_l = self.baxter.left_arm.get_ee_pose()['orientation']
+        quat_r = self.baxter.right_arm.get_ee_pose()['orientation']
+        self.init_quat_r = np.array([quat_r.w, quat_r.x, quat_r.y, quat_r.z])
+        quat_l = self.baxter.left_arm.get_ee_pose()['orientation']
+        self.init_quat_l = np.array([quat_l.w, quat_l.x, quat_l.y, quat_l.z])
+        # self.init_quat_r = self.baxter.right_arm.get_ee_pose()['orientation']
+        # self.init_quat_l = self.baxter.left_arm.get_ee_pose()['orientation']
 
         # This executes EndEffectorCommand.CMD_CALIBRATE command
         _threaded_execution(
@@ -215,39 +244,58 @@ class Controller(object):
     Callback
     """
     def pose_right_callback(self, poses):
-        rpos_ee = Point(*np_bridge.to_numpy_f64(poses))
-        rospy.loginfo(f'Received rpos_ee: {rpos_ee}')
+        import time
+        started = time.time()
+        # rpos_ee = Point(*np_bridge.to_numpy_f64(poses))
+        pos_ee = poses.point
+        # rospy.loginfo(f'Received rpos_ee: {pos_ee}')
         # lpos_ee = poses.left_ee
         # rpos_ee = poses.right_ee
 
         # jquat_r = self.baxter.right_arm.get_ee_pose()['orientation']
         # jquat_l = self.baxter.left_arm.get_ee_pose()['orientation']
-        jpos_r = self.baxter.left_arm.solve_ik(rpos_ee, self.init_quat_r)
+        scaled = self.pos_scale.right([pos_ee.x, pos_ee.y, pos_ee.z])
+        # rospy.loginfo(f'scaled right: {scaled}')
+        jpos_r = self.baxter.right_arm.solve_ik(scaled, orientation=self.init_quat_r if self.fix_ori else None, tol=0.001)
         if jpos_r is None:
             rospy.logwarn('[warn] IK solution not found!')
             rospy.loginfo('[info] IK solution not found!')
         # jpos_l = self.baxter.right_arm.solve_ik(lpos_ee, self.init_quat_l)
+        quat_r = self.baxter.right_arm.get_ee_pose()['orientation']
+        diff = np.linalg.norm(quat_r - self.init_quat_r)
+        rospy.loginfo(f'init_quat_r: {self.init_quat_r}\t{quat_r}')
+        rospy.loginfo(f'quat diff: {diff}')
 
         # MOVE
-        self.baxter.right_arm.move_to_joint_positions(jpos_r)
+        self.baxter.right_arm.move_to_joint_positions(jpos_r, timeout=0.1)
         # self.baxter.left_arm.move_to_joint_positions(jpos_l)
 
         rospy.loginfo('pose callback is called!!')
+        elapsed = time.time() - started
+        rospy.loginfo(f'right arm IK elapsed: {elapsed}')
 
     def pose_left_callback(self, poses):
-        pos_ee = Point(*np_bridge.to_numpy_f64(poses))
-        rospy.loginfo(f'Received rpos_ee: {pos_ee}')
+        # pos_ee = Point(*np_bridge.to_numpy_f64(poses))
+        started = time.time()
+        pos_ee = poses.point
+        # rospy.loginfo(f'Received lpos_ee: {pos_ee}')
 
-        jpos = self.baxter.left_arm.solve_ik(pos_ee, self.init_quat_l)
+
+        scaled = self.pos_scale.left([pos_ee.x, pos_ee.y, pos_ee.z])
+        rospy.loginfo(f'scaled left: {scaled}')
+        jpos = self.baxter.left_arm.solve_ik(scaled, orientation=self.init_quat_l if self.fix_ori else None, tol=0.001)  # :solve_ik(pos_ee, self.init_quat_l)
         if jpos is None:
             rospy.logwarn('[warn] IK solution not found!')
             rospy.loginfo('[info] IK solution not found!')
+            return
 
         # MOVE
-        self.baxter.left_arm.move_to_joint_positions(jpos)
+        self.baxter.left_arm.move_to_joint_positions(jpos, timeout=0.1)
         # self.baxter.left_arm.move_to_joint_positions(jpos_l)
 
         rospy.loginfo('pose callback is called!!')
+        elapsed = time.time() - started
+        rospy.loginfo(f'left arm IK elapsed: {elapsed}')
 
 
 def main():
@@ -257,6 +305,7 @@ def main():
     c = Controller(
         target_ee_right='/robot_poses/right',
         target_ee_left='/robot_poses/left',
+        fix_ori=True
     )
     rospy.loginfo('Initializing controller')
     c.initialize()
