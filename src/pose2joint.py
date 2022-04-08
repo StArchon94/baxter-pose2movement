@@ -85,6 +85,7 @@ class Pose2Joint:
         # self.pub_pose = rospy.Publisher('/robot_poses', Float64MultiArray, queue_size=1)
         self.pub_pose_left = rospy.Publisher('/robot_poses/right', PointStamped, queue_size=1)
         self.pub_pose_right = rospy.Publisher('/robot_poses/left', PointStamped, queue_size=1)
+        self.pub_pose_all = rospy.Publisher('/robot_poses/all', Float64MultiArray, queue_size=1)
         rospy.loginfo('Pose2Joint Node is Up!')
         rospy.spin()
 
@@ -224,25 +225,15 @@ class Pose2Joint:
             header = Header(stamp=rospy.Time.now(), frame_id='base')
             pose_stamped = PointStamped(header=header, point=Point(*robot_left_wrist_3d))
             self.pub_pose_left.publish(pose_stamped)
-            # self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
 
-        if choice == 3:
-            # output 3d coords for two arms
-            coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
-            R_from_camera_to_world = np.eye(3)
-            t_from_caemra_to_world = np.zeros((3, 1))
-            coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
-                coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
-
+            # All
             coords_3d_list = []
             for i in range(6):
                 coord_2d = self.valid_arm_poses[i, :]
                 coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
                 coords_3d_list.append(coord_3d)
             coords_3d = np.array(coords_3d_list).squeeze()
-
-            # self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
-            self.pub_pose.publish(np_bridge.to_multiarray_f64(coords_3d))
+            self.pub_pose_all.publish(np_bridge.to_multiarray_f64(coords_3d))
 
         # if choice == 3:
         #     # output 3d coords for two arms
@@ -253,12 +244,13 @@ class Pose2Joint:
         #         coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
 
         #     coords_3d_list = []
-        #     for i in range(5, 11):
-        #         coord_2d = green_object_pose[i, :]
+        #     for i in range(6):
+        #         coord_2d = self.valid_arm_poses[i, :]
         #         coord_3d = coord_3d_from_world[coord_2d[1], coord_2d[0]]
         #         coords_3d_list.append(coord_3d)
-
         #     coords_3d = np.array(coords_3d_list).squeeze()
+
+        #     # self.pub_pose.publish(np_bridge.to_multiarray_f64(robot_right_wrist_3d))
         #     self.pub_pose.publish(np_bridge.to_multiarray_f64(coords_3d))
 
 
