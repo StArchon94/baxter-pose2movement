@@ -110,7 +110,7 @@ class Pose2Joint:
         return robot_3d
 
     @staticmethod
-    def check_valid_depth(depth, range=[0.0, 2.0]):
+    def check_valid_depth(depth, range=[0.5, 3.0]):
         depth = depth / 1000
         return (depth > range[0] and depth < range[1])
 
@@ -153,7 +153,7 @@ class Pose2Joint:
             if np.all(valid_depths > 0):
                 self.valid_depths = valid_depths
             else:
-                print(valid_depths)
+                # print(valid_depths)
                 print('not all depths are valid yet')
                 return
 
@@ -198,11 +198,11 @@ class Pose2Joint:
             # print(right_wrist_3d_from_camera)
 
             # R_from_camera_to_world = np.eye(3)
-            # t_from_caemra_to_world = np.zeros((3,1))
+            # t_from_camera_to_world = np.zeros((3,1))
             R_from_camera_to_world = Ry(22 + 90).matrix @ Rz(-90).matrix
-            t_from_caemra_to_world = np.array([0.0947, 0, .817])[:, np.newaxis]
+            t_from_camera_to_world = np.array([0.0947, 0, .817])[:, np.newaxis]
             coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
-                coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
+                coord_3d_from_camera[:, :, :, np.newaxis] + t_from_camera_to_world[np.newaxis, np.newaxis, :]
 
             right_wrist_3d = coord_3d_from_world[right_wrist[1], right_wrist[0]]
             left_wrist_3d = coord_3d_from_world[left_wrist[1], left_wrist[0]]
@@ -239,9 +239,9 @@ class Pose2Joint:
         #     # output 3d coords for two arms
         #     coord_3d_from_camera = self.camera.reconstruct(depth=filtered_depth)
         #     R_from_camera_to_world = np.eye(3)
-        #     t_from_caemra_to_world = np.zeros((3, 1))
+        #     t_from_camera_to_world = np.zeros((3, 1))
         #     coord_3d_from_world = R_from_camera_to_world[np.newaxis, np.newaxis, :] @ \
-        #         coord_3d_from_camera[:, :, :, np.newaxis] + t_from_caemra_to_world[np.newaxis, np.newaxis, :]
+        #         coord_3d_from_camera[:, :, :, np.newaxis] + t_from_camera_to_world[np.newaxis, np.newaxis, :]
 
         #     coords_3d_list = []
         #     for i in range(6):
