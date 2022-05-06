@@ -39,6 +39,7 @@ class Coords2Movement:
         self.enable()
         print('moving to neutral pose')
         self.move_to_neutral()
+        self.baxter.head.set_pan(0)
 
         # This executes EndEffectorCommand.CMD_CALIBRATE command
         # _threaded_execution(
