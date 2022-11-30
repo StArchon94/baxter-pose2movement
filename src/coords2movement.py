@@ -19,6 +19,7 @@ def _threaded_execution(*fs):
 
 
 class Coords2Movement:
+    """ computes the joint angles from 3D coords, and make baxter move accordingly """
     TIMEOUT = 0.3
     THRESHOLD = 0.002
     RESET_TIMEOUT = 3

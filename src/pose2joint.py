@@ -63,6 +63,7 @@ class Rz(RorationMatrix):
 
 
 class Pose2Joint:
+    """ converts detected poses from image coordinates to 3D space """
     def __init__(self) -> None:
         self.depth_raw = None
         self.cv_bridge = CvBridge()
