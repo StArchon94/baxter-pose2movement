@@ -120,7 +120,7 @@ class Pose2Joint:
 
     def pose_callback(self, data):
         if self.depth_raw is None:
-            print('no depth')
+            # print('no depth')
             return
         poses = np_bridge.to_numpy_i64(data)
         green_object_idx = np.argwhere(poses[:, -1, 0] == 1)
@@ -135,7 +135,7 @@ class Pose2Joint:
             if np.all(arm_poses > 0):
                 self.valid_arm_poses = arm_poses
             else:
-                print('no valid poses yet')
+                # print('no valid poses yet')
                 return
 
         # update last_valid_arm_poses
@@ -154,8 +154,7 @@ class Pose2Joint:
             if np.all(valid_depths > 0):
                 self.valid_depths = valid_depths
             else:
-                # print(valid_depths)
-                print('not all depths are valid yet')
+                # print('not all depths are valid yet')
                 return
 
         # update valid depths
